@@ -1,0 +1,107 @@
+name: Build and test
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -m unittest discover -s tests -v
+
+  windows:
+    needs: test
+    runs-on: windows-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Check that the tag matches the version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          version=$(cat spool_desktop/VERSION)
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match spool_desktop/VERSION ($version)"; exit 1
+          fi
+      - name: Build SpoolInventory.exe
+        shell: bash
+        run: |
+          python -m pip install pyinstaller==6.11.1
+          python -m PyInstaller --onefile --name SpoolInventory --icon spool_desktop/icon.ico \
+            --add-data "spool_desktop/web;spool_desktop/web" \
+            --add-data "spool_desktop/core/messages.json;spool_desktop/core" \
+            --add-data "spool_desktop/VERSION;spool_desktop" \
+            run.py
+      - name: Smoke test the built program
+        shell: pwsh
+        run: |
+          $exe = ".\dist\SpoolInventory.exe"
+          & $exe --version
+          $p = Start-Process -FilePath $exe -ArgumentList "--no-browser","--port","8799","--data","$env:RUNNER_TEMP\smoke" -PassThru
+          $ok = $false
+          foreach ($i in 1..20) {
+            Start-Sleep -Seconds 1
+            try { if ((Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8799/ping).Content -eq "spool-inventory-desktop") { $ok = $true; break } } catch {}
+          }
+          if ($ok) {
+            foreach ($f in "/", "/static/panel.js", "/static/catalog.json", "/static/shim.js") {
+              $r = Invoke-WebRequest -UseBasicParsing "http://127.0.0.1:8799$f"
+              if ($r.StatusCode -ne 200 -or $r.Content.Length -lt 100) { $ok = $false; Write-Host "bad $f" }
+            }
+          }
+          Stop-Process -Id $p.Id -Force
+          if (-not $ok) { throw "The built program did not start correctly" }
+      - name: Checksum
+        shell: bash
+        run: |
+          cd dist
+          sha256sum SpoolInventory.exe | tee SpoolInventory.exe.sha256
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/SpoolInventory.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SpoolInventory-windows
+          path: dist/SpoolInventory.exe*
+      - name: Release notes from CHANGELOG.md
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          version=$(cat spool_desktop/VERSION)
+          awk -v v="$version" '$0 ~ "^## "v"( |$)" {on=1; next} /^## / {on=0} on' CHANGELOG.md > notes.md
+          printf '\nSHA-256 of SpoolInventory.exe:\n\n    %s\n' "$(cut -d' ' -f1 dist/SpoolInventory.exe.sha256)" >> notes.md
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          flag="--prerelease=false --latest"
+          case "$GITHUB_REF_NAME" in *-*|v0.*) flag="--prerelease" ;; esac
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/SpoolInventory.exe dist/SpoolInventory.exe.sha256 --clobber
+            gh release edit "$GITHUB_REF_NAME" --notes-file notes.md $flag
+          else
+            gh release create "$GITHUB_REF_NAME" dist/SpoolInventory.exe dist/SpoolInventory.exe.sha256 \
+              --title "$GITHUB_REF_NAME" --notes-file notes.md $flag
+          fi
