@@ -1,0 +1,17 @@
+{
+ "not_loaded": "Spool Inventory is not set up. Add it under Settings > Devices & services.",
+ "not_a_spool": "This action only works on spool sensors, not on the summary sensors.",
+ "spool_not_found": "Spool {spool_id} was not found.",
+ "weight_conflict": "Provide either remaining_weight or gross_weight, not both.",
+ "gross_below_tare": "The weighed value ({gross} g) is lower than the empty spool weight ({tare} g). Check the empty spool weight.",
+ "catalog_full": "Your own catalog is full (500 entries). Remove some entries first.",
+ "import_invalid": "That file is not a Spool Inventory backup.",
+ "not_in_trash": "That spool is no longer in the recently deleted list.",
+ "printer_not_found": "That printer does not exist.",
+ "task_not_found": "That maintenance task does not exist.",
+ "item_not_found": "That part or consumable does not exist.",
+ "name_required": "A name is required.",
+ "task_invalid": "The maintenance task needs a name, an interval of 1 to 3650 days and a date that is not in the future.",
+ "item_invalid": "The part or consumable needs a name and valid numbers.",
+ "equipment_full": "The limit of printers, tasks or items is reached."
+}
