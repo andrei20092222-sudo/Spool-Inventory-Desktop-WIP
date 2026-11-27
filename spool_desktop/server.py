@@ -40,6 +40,16 @@ class App:
         self.clients: list[queue.Queue[str]] = []
         self.hass._listeners.setdefault(SIGNAL_INVENTORY_CHANGED, []).append(self._changed)
         self.stop = threading.Event()
+        threading.Thread(target=self._hourly, daemon=True).start()
+
+    def _hourly(self) -> None:
+        """Keep maintenance tasks up to date (overdue marks) while the app stays open."""
+        while not self.stop.wait(3600):
+            try:
+                with self.hass.lock:
+                    self.manager.equipment.check_tasks()
+            except Exception:  # never let the timer die
+                _LOGGER.exception("Hourly check failed")
 
     def snapshot(self) -> str:
         return json.dumps(api.payload(self.manager))

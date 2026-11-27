@@ -121,7 +121,7 @@ class AppTest(unittest.TestCase):
         self.assertEqual(self.r.call("add", vendor="X")[0], 400)  # material missing
         self.assertEqual(self.r.call("add", vendor="X", material="PLA", bogus=1)[0], 400)
         self.assertEqual(self.r.call("add", vendor="X", material="PLA", remaining_weight=-5)[0], 400)
-        self.assertEqual(self.r.call("printer_add", name="x")[0], 400)  # no printer features here
+        self.assertEqual(self.r.call("prusalink_start", name="x")[0], 400)  # PrusaLink needs Home Assistant
         self.assertEqual(self.r.raw({"type": "other/add"})[0], 400)
 
     def test_only_this_computer_and_our_page(self) -> None:
@@ -168,6 +168,51 @@ class AppTest(unittest.TestCase):
         main.write_text("{ broken", encoding="utf-8")
         self.r = Running(self.tmp.name)
         self.assertTrue(main.with_suffix(".damaged").exists())
+
+    def test_price_calculator(self) -> None:
+        self.assertEqual(self.r.call("pricing_settings", energy_cost=1.2, labor_rate=40, failure_pct=5)[0], 200)
+        status, body = self.r.call("machine_add", name="Core One+", price=5700, service=3000, life_hours=10000, kwh_per_h=0.24)
+        self.assertEqual(status, 200, body)
+        mid = body["result"]["id"]
+        job = {"machine_id": mid, "hours": 8 + 31 / 60, "prep_min": 5, "post_min": 3, "filaments": [{"grams": 106, "price_per_kg": 170}]}
+        status, body = self.r.call("price_calc", **job)
+        self.assertEqual((status, body["result"]["filament"], body["result"]["suggested"]), (200, 18.02, 47.08))
+        status, body = self.r.call("quote_save", customer="Test", description="Moss pole", quoted=50, **job)
+        self.assertEqual(status, 200, body)
+        qid = body["result"]["id"]
+        self.assertEqual(self.r.call("quote_save", quote_id=qid, status="paid", **job)[1]["result"]["status"], "paid")
+        for bad in ({"hours": -1}, {"filaments": "x"}, {"nope": 1}):
+            self.assertNotEqual(self.r.call("price_calc", **bad)[0], 200)
+        self.assertEqual(self.r.call("quote_delete", quote_id=qid)[0], 200)
+        self.assertNotEqual(self.r.call("quote_delete", quote_id=qid)[0], 200)
+        self.assertEqual(self.r.call("machine_delete", machine_id=mid)[0], 200)
+
+    def test_printer_tab_commands(self) -> None:
+        status, body = self.r.call("printer_add", name="Core One+", model="Prusa", starter=True)
+        self.assertEqual(status, 200, body)
+        pid = body["result"]["id"]
+        state = json.loads(self.r.app.snapshot())["equipment"]
+        self.assertEqual((len(state["printers"]), len(state["tasks"])), (1, 6))
+        tid = state["tasks"][0]["id"]
+        self.assertEqual(self.r.call("task_done", task_id=tid, note="ok")[0], 200)
+        status, body = self.r.call("item_add", name="Nozzle 0.4", printer_id=pid, quantity=2, low_at=1, unit="pcs")
+        self.assertEqual(status, 200, body)
+        iid = body["result"]["id"]
+        self.assertEqual(self.r.call("item_adjust", item_id=iid, delta=-1)[1]["result"]["quantity"], 1)
+        self.assertTrue(json.loads(self.r.app.snapshot())["equipment"]["items"][0]["low"])
+        self.assertNotEqual(self.r.call("item_add", name="")[0], 200)
+        self.assertNotEqual(self.r.call("task_add", printer_id=pid, name="x", interval_days=0)[0], 200)
+        self.assertEqual(self.r.call("printer_delete", printer_id=pid)[0], 200)
+        self.assertEqual(json.loads(self.r.app.snapshot())["equipment"]["tasks"], [])
+
+    def test_customer_list(self) -> None:
+        self.assertEqual(self.r.call("customer_add", name="Alex")[1]["result"], ["Alex"])
+        self.assertEqual(self.r.call("quote_save", customer="Sam")[0], 200)
+        self.assertEqual(self.r.call("customer_rename", name="Sam", new_name="Samuel")[1]["result"], ["Alex", "Samuel"])
+        self.assertNotEqual(self.r.call("customer_rename", name="Samuel", new_name="alex")[0], 200)
+        self.assertNotEqual(self.r.call("customer_add", name="")[0], 200)
+        self.assertEqual(self.r.call("customer_delete", name="Alex")[1]["result"], ["Samuel"])
+        self.assertEqual(json.loads(self.r.app.snapshot())["pricing"]["customers"], ["Samuel"])
 
     def test_quit_stops_the_app(self) -> None:
         self.assertEqual(self.r.call("quit")[0], 200)

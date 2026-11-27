@@ -6,7 +6,7 @@ A small, portable filament inventory. No install, no account, no cloud, no Home 
 file, double-click it, and your inventory opens in your browser.
 
 It is the same inventory as [Spool Inventory for Home Assistant](https://github.com/andrei20092222-sudo/Spool-Inventory)
-(same code, same panel), without anything about printers.
+(same code, same panel), without the PrusaLink part.
 
 > **Status: early version (0.1).** It was just made and has not been used by many people yet. Please keep a backup
 > of your data (Settings > Download backup).
@@ -17,9 +17,11 @@ It is the same inventory as [Spool Inventory for Home Assistant](https://github.
 - **Catalog**: pick vendor, material and color from the Open Filament Database (about 150 brands, 14,700 colors),
   or add your own entries.
 - **What fits?**, **weigh session**, **By color**, **By location**, **reorder list**, **archive**, **history with undo**.
+- **Printer tab**: maintenance tasks with intervals and overdue marks, parts and consumables (nozzles, sheets, IPA) with low-stock warnings.
+- **Price tab**: cost and selling price of a print (filament from your spools, electricity, machine wear, your time, failure allowance, markup), with saved quotes. Rates and machines start empty, so set yours first.
 - **Backups and CSV export.**
 
-Not included: automatic subtraction, printer maintenance and parts. Those need Home Assistant and stay in the
+Not included: PrusaLink and the automatic subtraction of grams. They need Home Assistant and stay in the
 [Home Assistant integration](https://github.com/andrei20092222-sudo/Spool-Inventory).
 
 ## How to use it

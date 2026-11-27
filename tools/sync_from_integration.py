@@ -2,8 +2,8 @@
 
 Usage: python tools/sync_from_integration.py ../Spool-Inventory
 
-The Windows app runs the integration's own manager.py, equipment.py and const.py (so the data and the rules are
-identical) and the same panel.js. Only one small patch is applied to the panel: the printer tab is removed.
+The Windows app runs the integration's own manager.py, equipment.py, pricing.py and const.py (so the data and the rules are
+identical) and the same panel.js. Small patches are applied to the panel: Home Assistant wording becomes app wording.
 """
 from __future__ import annotations
 
@@ -12,9 +12,8 @@ import shutil
 import sys
 from pathlib import Path
 
-# (old text, new text): the printer tab goes away and the Home Assistant wording becomes app wording.
+# (old text, new text): the Home Assistant wording becomes app wording.
 PANEL_PATCHES = [
-    ('tab("printer", this._eqBadge()), ', ""),
     ('h("label", { class: "row2" }, notify, h("span", {}, "Show a Home Assistant notification when a spool gets low or empty")),\n'
      '      h("p", { class: "hint" }, "Home Assistant also fires the events spool_inventory_low and spool_inventory_empty, '
      'so an automation can send a phone message."),\n', ""),
@@ -29,7 +28,7 @@ PKG = ROOT / "spool_desktop"
 
 def main(src_repo: str) -> None:
     src = Path(src_repo) / "custom_components" / "spool_inventory"
-    for name in ("manager.py", "equipment.py", "const.py"):
+    for name in ("manager.py", "equipment.py", "pricing.py", "const.py"):
         shutil.copyfile(src / name, PKG / "core" / name)
     panel = (src / "www" / "panel.js").read_text(encoding="utf-8")
     for old, new in PANEL_PATCHES:
